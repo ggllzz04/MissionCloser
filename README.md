@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/ggllzz04/MissionCloser/releases/latest"><img src="https://img.shields.io/github/v/release/ggllzz04/MissionCloser" alt="Release"></a>
+  <a href="https://github.com/ggllzz04/MissionCloser/actions/workflows/build.yml"><img src="https://github.com/ggllzz04/MissionCloser/actions/workflows/build.yml/badge.svg" alt="Build"></a>
   <img src="https://img.shields.io/badge/macOS-13%2B-blue" alt="macOS 13+">
   <img src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-lightgrey" alt="Universal">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
@@ -93,6 +94,15 @@ scripts/build.sh --zip    # 额外生成 build/MissionCloser.zip
 MISSIONCLOSER_DEBUG=1 build/MissionCloser.app/Contents/MacOS/MissionCloser
 ```
 
+### 自动构建
+
+[GitHub Actions](.github/workflows/build.yml) 会在每次推送和 PR 时自动构建，构建产物可以在 [Actions](https://github.com/ggllzz04/MissionCloser/actions) 页面下载。
+发布新版本只需要推送版本标签，工作流会自动构建并把 `MissionCloser.zip` 上传到对应的 Release：
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
 ### 项目结构
 
 ```
@@ -104,7 +114,7 @@ Sources/
   Settings.swift        设置项与 SwiftUI 设置窗口
 Resources/              Info.plist、应用图标
 scripts/
-  build.sh              构建脚本
+  build.sh              构建脚本（本地与 CI 共用）
   make-icon.swift       用代码绘制应用图标
 ```
 
