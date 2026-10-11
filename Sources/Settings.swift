@@ -12,6 +12,12 @@ enum ButtonVisibility: String, CaseIterable, Identifiable {
     var label: String { self == .always ? "始终显示" : "悬停时显示" }
 }
 
+enum ButtonPosition: String, CaseIterable, Identifiable {
+    case topLeft, topRight
+    var id: String { rawValue }
+    var label: String { self == .topLeft ? "左上角" : "右上角" }
+}
+
 enum ButtonSize: String, CaseIterable, Identifiable {
     case small, medium, large
     var id: String { rawValue }
@@ -25,6 +31,7 @@ final class Settings: ObservableObject {
 
     @Published var enabled: Bool { didSet { save(enabled, "enabled") } }
     @Published var visibility: ButtonVisibility { didSet { save(visibility.rawValue, "visibility") } }
+    @Published var position: ButtonPosition { didSet { save(position.rawValue, "position") } }
     @Published var size: ButtonSize { didSet { save(size.rawValue, "size") } }
     @Published var shortcutClose: Bool { didSet { save(shortcutClose, "shortcutClose") } }
     @Published var shortcutQuit: Bool { didSet { save(shortcutQuit, "shortcutQuit") } }
@@ -45,6 +52,7 @@ final class Settings: ObservableObject {
         func bool(_ key: String, _ def: Bool) -> Bool { d.object(forKey: key) as? Bool ?? def }
         enabled = bool("enabled", true)
         visibility = ButtonVisibility(rawValue: d.string(forKey: "visibility") ?? "") ?? .always
+        position = ButtonPosition(rawValue: d.string(forKey: "position") ?? "") ?? .topLeft
         size = ButtonSize(rawValue: d.string(forKey: "size") ?? "") ?? .medium
         shortcutClose = bool("shortcutClose", true)
         shortcutQuit = bool("shortcutQuit", true)
@@ -133,6 +141,10 @@ struct SettingsView: View {
                 Section("关闭按钮") {
                     Picker("显示方式", selection: $settings.visibility) {
                         ForEach(ButtonVisibility.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("位置", selection: $settings.position) {
+                        ForEach(ButtonPosition.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     Picker("大小", selection: $settings.size) {

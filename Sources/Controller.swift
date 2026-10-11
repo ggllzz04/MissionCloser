@@ -110,9 +110,10 @@ final class Controller {
             let visible = i < thumbs.count && mapping[i] != nil
                 && (settings.visibility == .always || i == hoveredThumb)
             guard visible else { if panel.isVisible { panel.orderOut(nil) }; continue }
-            // 左上角，略向外偏移，和系统窗口关闭按钮的位置感觉一致
+            // 放在缩略图角上，略向外偏移，和系统窗口关闭按钮的位置感觉一致
             let t = thumbs[i].frame
-            let rect = CGRect(x: t.minX - s * 0.35, y: t.minY - s * 0.35, width: s, height: s)
+            let x = settings.position == .topLeft ? t.minX - s * 0.35 : t.maxX - s * 0.65
+            let rect = CGRect(x: x, y: t.minY - s * 0.35, width: s, height: s)
             buttonRects[i] = rect
             let frame = cocoaRect(fromAX: rect)
             if panel.frame != frame { panel.setFrame(frame, display: true) }
