@@ -19,23 +19,23 @@ jobs:
       - name: Build
         run: |
           swiftc --version
-          scripts/build.sh --zip
+          scripts/build.sh --dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MissionCloser
-          path: build/MissionCloser.zip
+          path: build/MissionCloser.dmg
 
-      # 推送 v* 标签时：创建（或更新）对应的 Release 并上传 zip
+      # 推送 v* 标签时：创建（或更新）对应的 Release 并上传 DMG
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" build/MissionCloser.zip --clobber
+            gh release upload "$GITHUB_REF_NAME" build/MissionCloser.dmg --clobber
           else
-            gh release create "$GITHUB_REF_NAME" build/MissionCloser.zip \
+            gh release create "$GITHUB_REF_NAME" build/MissionCloser.dmg \
               --title "MissionCloser ${GITHUB_REF_NAME#v}" --generate-notes
           fi

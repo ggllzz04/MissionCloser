@@ -37,7 +37,7 @@ macOS 的调度中心可以看到所有窗口，却不能直接关掉它们。Mi
 
 ## 安装
 
-1. 从 [Releases](https://github.com/ggllzz04/MissionCloser/releases/latest) 下载 `MissionCloser.zip`，解压后把 `MissionCloser.app` 拖进「应用程序」文件夹
+1. 从 [Releases](https://github.com/ggllzz04/MissionCloser/releases/latest) 下载 `MissionCloser.dmg`，双击打开，把 MissionCloser 拖到右边的「应用程序」文件夹
 2. 首次打开：应用没有经过 Apple 公证，需要**右键点击 → 打开**，在弹窗中再点一次「打开」。
    如果系统提示「已损坏」或无法打开，在终端执行：
    ```bash
@@ -83,7 +83,7 @@ MissionCloser 不在菜单栏和 Dock 中显示图标。需要调整设置时，
 git clone https://github.com/ggllzz04/MissionCloser.git
 cd MissionCloser
 scripts/build.sh          # 生成 build/MissionCloser.app
-scripts/build.sh --zip    # 额外生成 build/MissionCloser.zip
+scripts/build.sh --dmg    # 额外生成安装镜像 build/MissionCloser.dmg
 ```
 
 构建出来的是本地临时签名的应用。**每次重新构建后签名都会变化**，需要到「辅助功能」列表里删掉旧的 MissionCloser 条目（选中后点 −），再重新授权一次。
@@ -97,7 +97,7 @@ MISSIONCLOSER_DEBUG=1 build/MissionCloser.app/Contents/MacOS/MissionCloser
 ### 自动构建
 
 [GitHub Actions](.github/workflows/build.yml) 会在每次推送和 PR 时自动构建，构建产物可以在 [Actions](https://github.com/ggllzz04/MissionCloser/actions) 页面下载。
-发布新版本只需要推送版本标签，工作流会自动构建并把 `MissionCloser.zip` 上传到对应的 Release：
+发布新版本只需要推送版本标签，工作流会自动构建并把安装镜像 `MissionCloser.dmg` 上传到对应的 Release：
 
 ```bash
 git tag v1.2.0 && git push origin v1.2.0
