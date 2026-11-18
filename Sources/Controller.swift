@@ -21,7 +21,7 @@ final class Controller {
     private var hoveredThumb: Int?
     private var pressedIndex: Int?
     private var eventTap: CFMachPort?
-    private var dockObserver: AXObserver?
+    private var hostObservers: [AXObserver] = []
     private var lastDebug: [String] = []
 
     /// 需要辅助功能权限，获得后调用
@@ -41,19 +41,22 @@ final class Controller {
         timer = t
     }
 
-    /// Dock 在进入/退出调度中心时会发出这些通知，用来加快响应；轮询作为兜底
+    /// Dock（旧系统）/ WindowManager（macOS 27+）在进入/退出调度中心时可能发出这些通知，
+    /// 用来加快响应；轮询作为兜底
     private func installDockObserver() {
-        guard let dock = MissionControl.dockApp, let dockAX = MissionControl.dockElement else { return }
-        var obs: AXObserver?
         let cb: AXObserverCallback = { _, _, _, _ in
             DispatchQueue.main.async { Controller.shared.tick() }
         }
-        guard AXObserverCreate(dock.processIdentifier, cb, &obs) == .success, let obs else { return }
-        for n in ["AXExposeShowAllWindows", "AXExposeShowFrontWindows", "AXExposeShowDesktop", "AXExposeExit"] {
-            AXObserverAddNotification(obs, dockAX, n as CFString, nil)
+        for app in MissionControl.hostApps {
+            var obs: AXObserver?
+            guard AXObserverCreate(app.processIdentifier, cb, &obs) == .success, let obs else { continue }
+            let ax = AXUIElementCreateApplication(app.processIdentifier)
+            for n in ["AXExposeShowAllWindows", "AXExposeShowFrontWindows", "AXExposeShowDesktop", "AXExposeExit"] {
+                AXObserverAddNotification(obs, ax, n as CFString, nil)
+            }
+            CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
+            hostObservers.append(obs)
         }
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
-        dockObserver = obs
     }
 
     // MARK: 主循环

@@ -1,11 +1,23 @@
 // 读取调度中心（Mission Control）的缩略图，并把它们匹配回真实窗口。
 //
-// 调度中心由 Dock 进程绘制，激活时 Dock 的辅助功能树中会出现
+// macOS 13–26：调度中心由 Dock 进程绘制，激活时 Dock 的辅助功能树中会出现
 //   AXGroup(id=mc) → AXGroup(id=mc.display) → AXGroup(id=mc.windows) → AXButton(缩略图)
-// 每个缩略图只有标题和屏幕坐标，没有所属进程，因此用「标题 + 宽高比 + 相对位置」匹配。
+//   每个缩略图只有标题和屏幕坐标，因此用「标题 + 宽高比 + 相对位置」匹配。
+// macOS 27 起：调度中心改由 WindowManager 进程绘制，层级变为
+//   AXGroup(id=mc.display) → AXButton(缩略图, id=<bundleID>.space.N, wid=<CGWindowID>)
+//   缩略图带有窗口 ID，可以精确匹配；没有 wid 时再退回启发式匹配。
 
 import Cocoa
 import ApplicationServices
+
+/// 私有但长期稳定的 API（Rectangle、AltTab 等都在用）：取 AX 窗口对应的 CGWindowID
+@_silgen_name("_AXUIElementGetWindow")
+private func _AXUIElementGetWindow(_ element: AXUIElement, _ id: UnsafeMutablePointer<CGWindowID>) -> AXError
+
+func axWindowID(_ e: AXUIElement) -> CGWindowID? {
+    var id: CGWindowID = 0
+    return _AXUIElementGetWindow(e, &id) == .success && id != 0 ? id : nil
+}
 
 // MARK: - AX 工具
 
@@ -46,7 +58,8 @@ func axPoint(fromCocoa p: NSPoint) -> CGPoint {
 struct Thumbnail {
     let title: String
     let frame: CGRect        // AX 坐标
-    let container: CGRect    // 所在 mc.windows 区域（AX 坐标）
+    let container: CGRect    // 所在 mc.windows / mc.display 区域（AX 坐标）
+    let windowID: CGWindowID?  // macOS 27+ 提供
 }
 
 final class RealWindow {
@@ -54,9 +67,11 @@ final class RealWindow {
     let app: NSRunningApplication
     let title: String
     let frame: CGRect        // AX 坐标
+    let windowID: CGWindowID?
 
     init(element: AXUIElement, app: NSRunningApplication, title: String, frame: CGRect) {
         self.element = element; self.app = app; self.title = title; self.frame = frame
+        self.windowID = axWindowID(element)
     }
 
     var appName: String { app.localizedName ?? "" }
@@ -120,23 +135,50 @@ enum MissionControl {
         dockApp.map { AXUIElementCreateApplication($0.processIdentifier) }
     }
 
+    /// macOS 27 起负责绘制调度中心的进程
+    static var windowManagerApp: NSRunningApplication? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.WindowManager").first
+    }
+
+    /// 可能绘制调度中心的进程，新系统优先
+    static var hostApps: [NSRunningApplication] { [windowManagerApp, dockApp].compactMap { $0 } }
+
     /// 调度中心未激活时返回 nil
     static func thumbnails() -> [Thumbnail]? {
-        guard let dock = dockElement,
-              let mc = axChildren(dock).first(where: { axString($0, kAXIdentifierAttribute) == "mc" })
-        else { return nil }
-        var result: [Thumbnail] = []
-        for display in axChildren(mc) where axString(display, kAXIdentifierAttribute) == "mc.display" {
-            for group in axChildren(display) where axString(group, kAXIdentifierAttribute) == "mc.windows" {
-                let container = axFrame(group) ?? .zero
-                for item in axChildren(group) where axString(item, kAXRoleAttribute) == kAXButtonRole {
-                    guard let f = axFrame(item), f.width > 20, f.height > 20 else { continue }
-                    result.append(Thumbnail(title: axString(item, kAXTitleAttribute) ?? "",
-                                            frame: f, container: container))
+        for app in hostApps {
+            let root = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementSetMessagingTimeout(root, 0.25)
+            // 旧系统多一层 id=mc；新系统 mc.display 直接挂在应用下
+            var displays: [AXUIElement] = []
+            for child in axChildren(root) {
+                switch axString(child, kAXIdentifierAttribute) {
+                case "mc": displays += axChildren(child).filter { axString($0, kAXIdentifierAttribute) == "mc.display" }
+                case "mc.display": displays.append(child)
+                default: break
                 }
             }
+            if displays.isEmpty { continue }
+            var result: [Thumbnail] = []
+            for display in displays {
+                // 旧系统缩略图在 mc.windows 组里；新系统直接是 mc.display 的子按钮
+                var groups: [(AXUIElement, CGRect)] = axChildren(display)
+                    .filter { axString($0, kAXIdentifierAttribute) == "mc.windows" }
+                    .map { ($0, axFrame($0) ?? .zero) }
+                groups.append((display, axFrame(display) ?? .zero))
+                for (group, container) in groups {
+                    for item in axChildren(group) where axString(item, kAXRoleAttribute) == kAXButtonRole {
+                        guard let f = axFrame(item), f.width > 20, f.height > 20 else { continue }
+                        let wid = (axAttr(item, "wid") as? NSNumber).map { CGWindowID($0.uint32Value) }
+                        // 新系统里 mc.display 的直接子按钮只有窗口缩略图；旧系统没有 wid 的直属按钮不是缩略图
+                        if CFEqual(group, display) && wid == nil { continue }
+                        result.append(Thumbnail(title: axString(item, kAXTitleAttribute) ?? "",
+                                                frame: f, container: container, windowID: wid))
+                    }
+                }
+            }
+            return result
         }
-        return result
+        return nil
     }
 
     /// 退出 / 进入调度中心
@@ -175,6 +217,11 @@ enum MissionControl {
             let tx = (t.frame.midX - tc.minX) / max(tc.width, 1), ty = (t.frame.midY - tc.minY) / max(tc.height, 1)
             for (wi, w) in windows.enumerated() {
                 var cost: Double
+                if let tid = t.windowID {
+                    // 有窗口 ID 时只接受精确匹配
+                    if tid == w.windowID { pairs.append((-1, ti, wi)) }
+                    continue
+                }
                 if t.title == w.title && !w.title.isEmpty { cost = 0 }
                 else if w.title.isEmpty && t.title == w.appName { cost = 0.3 }
                 else if !w.title.isEmpty && !t.title.isEmpty && (t.title.contains(w.title) || w.title.contains(t.title)) { cost = 0.8 }
